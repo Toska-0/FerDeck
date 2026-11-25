@@ -21,7 +21,7 @@ class DeckViewModel(app: Application) : AndroidViewModel(app) {
     val connected = ws.connected
     val log = ws.log
 
-    private val _demo = MutableStateFlow(true)
+    private val _demo = MutableStateFlow(_config.value.demoMode)
     val demo = _demo.asStateFlow()
     private val _editing = MutableStateFlow(false)
     val editing = _editing.asStateFlow()
@@ -86,6 +86,8 @@ class DeckViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setDemo(value: Boolean) {
         _demo.value = value
+        _config.update { it.copy(demoMode = value) }
+        persist()
         if (value) { reconnectJob?.cancel(); ws.disconnect() }
     }
 

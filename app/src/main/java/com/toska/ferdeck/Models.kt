@@ -31,6 +31,7 @@ data class DeckConfig(
     val pin: String = "123456",
     val keepScreenOn: Boolean = true,
     val fullscreen: Boolean = false,
+    val demoMode: Boolean = true,
     val pages: List<DeckPage> = listOf(
         DeckPage("Основное", tiles = listOf(
             Tile(type = "hotkey", title = "Рабочий стол", icon = "▣", action = "win+d", row = 0, column = 0),
