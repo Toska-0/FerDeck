@@ -1,27 +1,73 @@
 # FerDeck
 
-Нативный Stream Deck для управления Windows-ПК со смартфона в одной Wi-Fi сети.
+Нативный Android Stream Deck для управления Windows-ПК по локальной Wi-Fi сети.
+
+## Реализовано
+
+### Android
+- Kotlin, Jetpack Compose, Material 3, ViewModel + StateFlow.
+- AMOLED-интерфейс, анимация нажатий и haptic feedback.
+- 4 профиля-страницы: «Основное», «Игры», «Медиа», «Система»; свайпы и нижняя навигация.
+- Адаптивная сетка: в портретном режиме используется заданное число колонок, в альбомном — минимум 5 колонок. Пресеты 4×3, 5×3 и 6×3.
+- Редактор плиток: хоткей, макрос, запуск программы, media, громкость, телеметрия; заголовок, emoji, акцентный цвет, параметры.
+- Обмен плиток через режим «Обмен», очистка ячейки.
+- Макросы с задержками в формате `ctrl+c;wait:250;ctrl+v`.
+- Общая громкость Windows с debounce-передачей значений.
+- CPU/RAM/GPU telemetry, история последних 60 сэмплов и sparkline на Canvas (CPU/RAM/GPU).
+- WebSocket + PIN, автоматическое переподключение, статус соединения.
+- Демо-режим с симуляцией метрик и JSON-команд в логе/Snackbar.
+- Локальное JSON-сохранение конфигурации и импорт/экспорт через системный файловый пикер.
+- Опции «Не выключать экран» и полноэкранный режим.
+
+### Windows companion
+- Python 3.10+, WebSocket-сервер с PIN.
+- Хоткеи и макросы, системные media-команды.
+- Общая громкость через pycaw; fallback через Windows media keys.
+- Запуск приложений только по фиксированному allowlist ID.
+- CPU/RAM через psutil, NVIDIA GPU через nvidia-smi; при отсутствии NVIDIA возвращается -1.
 
 ## Структура
-- `app/` — Android-приложение на Kotlin + Jetpack Compose, Material 3, StateFlow/ViewModel, OkHttp WebSocket, Kotlinx Serialization.
-- `server/server.py` — Windows WebSocket-сервер с PIN, хоткеями, макросами, media-клавишами, громкостью, запуском программ по allowlist и телеметрией.
-- `.github/workflows/android-apk.yml` — сборка APK на GitHub Actions.
 
-## Сборка Android
-Откройте репозиторий в Android Studio (JDK 17). Используются AGP 8.7.3, Kotlin 2.0.21, Gradle 8.9, compile/target SDK 35 и min SDK 26. Запустите Gradle task `assembleDebug`. APK будет в `app/build/outputs/apk/debug/app-debug.apk`. Workflow собирает APK при push в main и при ручном запуске (Actions → Android APK); файл доступен как artifact `FerDeck-debug-apk`.
+- `app/` — нативное Android-приложение.
+- `server/server.py` — сервер-компаньон Windows.
+- `server/requirements.txt` — Python-зависимости.
+- `.github/workflows/android-apk.yml` — сборка APK при push и вручную.
+- `gradlew`, `gradlew.bat`, `gradle/wrapper/` — Gradle Wrapper 8.9.
 
-## Сервер Windows
-1. Установите Python 3.10+.
-2. Откройте PowerShell в каталоге `server`.
-3. Выполните `py -m venv .venv`.
-4. Активируйте окружение: `.venv\\Scripts\\Activate.ps1`.
-5. Установите пакеты: `pip install -r requirements.txt`.
-6. Запустите `python server.py`.
+## Android Studio и APK
 
-В консоли появятся IP, порт (по умолчанию 8765) и PIN. В приложении откройте ⚙ и введите эти данные. Разрешите Python входящие подключения в Windows Firewall для частной сети. Телефон и ПК должны быть в одной Wi-Fi сети. PIN можно задать переменной окружения `FERDECK_PIN`, порт — `FERDECK_PORT`.
+1. Откройте репозиторий в Android Studio.
+2. Используйте JDK 17; Gradle Wrapper автоматически скачает Gradle 8.9.
+3. Выполните задачу `assembleDebug` (или Build → Build Bundle(s) / APK(s) → Build APK(s)).
+4. APK: `app/build/outputs/apk/debug/app-debug.apk`.
 
-## Безопасность
-Команды запуска программ принимаются только по ID из словаря `COMMANDS` в `server.py`. Не добавляйте запуск произвольных shell-строк. Используйте только в доверенной локальной сети.
+Параметры: minSdk 26, targetSdk 35, compileSdk 35, AGP 8.7.3, Kotlin 2.0.21. Зависимости Compose Material 3, OkHttp 4.12.0 и kotlinx.serialization.
 
-## Примечания
-Реализованы четыре страницы 4×3, свайп-переключение, нижняя навигация, редактор плиток, JSON-сохранение и импорт/экспорт, демо-телеметрия, WebSocket, reconnect, серверные хоткеи/макросы/media/volume/launch и CPU/RAM/GPU telemetry. UI дополнительных сеточных пресетов, drag-and-drop обмена и полноценного volume slider с двусторонней синхронизацией пока нет — это следующий этап разработки.
+GitHub Actions: вкладка Actions → Android APK. После успешной сборки скачайте artifact `FerDeck-debug-apk`.
+
+## Запуск Windows-сервера
+
+В PowerShell из каталога репозитория:
+
+```powershell
+cd server
+py -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+python server.py
+```
+
+В консоли появятся IP компьютера, порт (по умолчанию 8765) и шестизначный PIN. В приложении откройте ⚙, введите IP/порт/PIN и нажмите «Подключить». Телефон и ПК должны быть в одной Wi-Fi сети. Если Windows Firewall спросит разрешение, разрешите входящие подключения Python для частной сети.
+
+Переменные окружения: `FERDECK_PORT` и `FERDECK_PIN`.
+
+## Команды запуска
+
+В редакторе плитки «Запуск программы» доступны ID: `notepad`, `calculator`, `steam`, `browser`, `explorer`. Изменить список можно в словаре `COMMANDS` файла `server.py`. Клиент не может передать произвольный путь или shell-команду.
+
+## Важно
+
+- Сервер предназначен для доверенной локальной сети; не пробрасывайте порт в интернет.
+- Для глобальных хоткеев библиотеке keyboard на некоторых конфигурациях Windows могут потребоваться права администратора.
+- GPU-показатель доступен при наличии NVIDIA-драйвера и `nvidia-smi`; для других GPU отображается «—».
+- Fallback громкости через media keys приблизительный; для точного уровня используется pycaw.
