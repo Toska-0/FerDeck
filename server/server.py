@@ -1,106 +1,189 @@
 from __future__ import annotations
-import asyncio, json, os, secrets, socket, subprocess
+
+import asyncio
+import json
+import os
+import secrets
+import socket
+import subprocess
+import time
+from typing import Any
+
 import psutil
 import websockets
 
-PORT = int(os.getenv('FERDECK_PORT', '8765'))
-PIN = os.getenv('FERDECK_PIN') or f'{secrets.randbelow(1_000_000):06d}'
-COMMANDS = {
-    'notepad': ['notepad.exe'],
-    'calculator': ['calc.exe'],
-    'steam': [r'C:\Program Files (x86)\Steam\steam.exe'],
-    'browser': ['cmd', '/c', 'start', '', 'https://www.google.com'],
+HOST = "0.0.0.0"
+PORT = int(os.getenv("FERDECK_PORT", "8765"))
+PIN = os.getenv("FERDECK_PIN") or f"{secrets.randbelow(1_000_000):06d}"
+
+# Fixed command allowlist. The Android client sends IDs, never executable paths or shell strings.
+COMMANDS: dict[str, list[str]] = {
+    "notepad": ["notepad.exe"],
+    "calculator": ["calc.exe"],
+    "steam": [r"C:\Program Files (x86)\Steam\steam.exe"],
+    "browser": ["cmd.exe", "/c", "start", "", "https://www.google.com"],
+    "explorer": ["explorer.exe"],
 }
-ALLOWED_KEYS = {'ctrl','shift','alt','win','enter','esc','tab','space','f1','f2','f3','f4','f5','f6','f7','f8','f9','f10','f11','f12','up','down','left','right','home','end','delete','backspace','a','c','v','x','z','m','d','r','l'}
+ALLOWED_KEYS = {
+    "ctrl", "shift", "alt", "windows", "win", "enter", "esc", "tab", "space",
+    "f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8", "f9", "f10", "f11", "f12",
+    "up", "down", "left", "right", "home", "end", "delete", "backspace",
+    *list("abcdefghijklmnopqrstuvwxyz0123456789")
+}
 
-def get_ip():
-    sock=socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
+
+def local_ip() -> str:
+    probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
-        sock.connect(('8.8.8.8',80)); return sock.getsockname()[0]
-    except OSError: return '127.0.0.1'
-    finally: sock.close()
+        probe.connect(("192.0.2.1", 80))
+        return probe.getsockname()[0]
+    except OSError:
+        return "127.0.0.1"
+    finally:
+        probe.close()
 
-def gpu_usage():
+
+def gpu_usage() -> float:
     try:
-        raw=subprocess.check_output(['nvidia-smi','--query-gpu=utilization.gpu','--format=csv,noheader,nounits'],text=True,timeout=2,stderr=subprocess.DEVNULL)
-        return float(raw.strip().splitlines()[0])
-    except (OSError,subprocess.SubprocessError,ValueError,IndexError): return -1.0
+        output = subprocess.check_output(
+            ["nvidia-smi", "--query-gpu=utilization.gpu", "--format=csv,noheader,nounits"],
+            text=True, timeout=2, stderr=subprocess.DEVNULL
+        )
+        return float(output.strip().splitlines()[0])
+    except (OSError, subprocess.SubprocessError, ValueError, IndexError):
+        return -1.0
 
-def hotkey(keys):
-    import keyboard
-    parts=[x.strip().lower() for x in keys.split('+') if x.strip()]
-    if not parts or len(parts)>5 or any(x not in ALLOWED_KEYS for x in parts): raise ValueError('Недопустимая комбинация клавиш')
-    keyboard.send('+'.join(parts))
 
-def run_macro(sequence):
+def send_hotkey(keys: str) -> None:
     import keyboard
-    # Format: ctrl+shift+m;wait:300;alt+f4
-    steps=[s.strip() for s in sequence.split(';') if s.strip()]
-    if len(steps)>20: raise ValueError('Слишком много шагов макроса')
+    parts = [part.strip().lower() for part in keys.split("+") if part.strip()]
+    if not parts or len(parts) > 5 or any(part not in ALLOWED_KEYS for part in parts):
+        raise ValueError("Недопустимая комбинация клавиш")
+    keyboard.send("+".join("windows" if part == "win" else part for part in parts))
+
+
+def run_macro(sequence: str) -> None:
+    # Example: ctrl+c;wait:250;ctrl+v
+    steps = [step.strip() for step in sequence.split(";") if step.strip()]
+    if not steps or len(steps) > 24:
+        raise ValueError("Макрос должен содержать от 1 до 24 шагов")
     for step in steps:
-        if step.startswith('wait:'):
-            ms=int(step.split(':',1)[1])
-            if ms<0 or ms>5000: raise ValueError('Задержка должна быть 0..5000 мс')
-            import time; time.sleep(ms/1000)
-        else: hotkey(step)
+        if step.startswith("wait:"):
+            try:
+                milliseconds = int(step.split(":", 1)[1])
+            except ValueError as exc:
+                raise ValueError("Некорректная задержка макроса") from exc
+            if not 0 <= milliseconds <= 5000:
+                raise ValueError("Задержка должна быть от 0 до 5000 мс")
+            time.sleep(milliseconds / 1000)
+        else:
+            send_hotkey(step)
 
-def media(action):
+
+def send_media(action: str) -> None:
     import keyboard
-    mapping={'play_pause':'play/pause media','next':'next track','prev':'previous track','mute':'volume mute'}
-    if action not in mapping: raise ValueError('Неизвестная media-команда')
-    keyboard.press_and_release(mapping[action])
+    keys = {"play_pause": "play/pause media", "next": "next track", "prev": "previous track", "mute": "volume mute"}
+    if action not in keys:
+        raise ValueError("Неизвестная media-команда")
+    keyboard.press_and_release(keys[action])
 
-def set_volume(value):
-    value=max(0.0,min(1.0,float(value)))
+
+def set_master_volume(value: Any) -> None:
+    scalar = max(0.0, min(1.0, float(value)))
     try:
         from pycaw.pycaw import AudioUtilities
-        device=AudioUtilities.GetSpeakers()
-        device.EndpointVolume.SetMasterVolumeLevelScalar(value,None)
+        AudioUtilities.GetSpeakers().EndpointVolume.SetMasterVolumeLevelScalar(scalar, None)
     except Exception:
-        # Fallback: one safe media-key action; exact scalar volume requires pycaw.
+        # Fallback approximation using Windows media keys; no shell execution.
         import keyboard
-        keyboard.press_and_release('volume mute' if value==0 else ('volume up' if value>=0.5 else 'volume down'))
+        for _ in range(50):
+            keyboard.press_and_release("volume down")
+        for _ in range(round(scalar * 50)):
+            keyboard.press_and_release("volume up")
 
-async def send_telemetry(ws):
+
+async def send_telemetry(websocket: Any) -> None:
     while True:
-        await ws.send(json.dumps({'type':'telemetry','cpu':psutil.cpu_percent(interval=None),'ram':psutil.virtual_memory().percent,'gpu':gpu_usage()}))
+        await websocket.send(json.dumps({
+            "type": "telemetry",
+            "cpu": psutil.cpu_percent(interval=None),
+            "ram": psutil.virtual_memory().percent,
+            "gpu": gpu_usage(),
+        }, separators=(",", ":")))
         await asyncio.sleep(1)
 
-async def handler(ws):
-    authenticated=False; telemetry_task=None
+
+async def handler(websocket: Any) -> None:
+    authenticated = False
+    telemetry_task: asyncio.Task | None = None
     try:
-        async for raw in ws:
-            try: msg=json.loads(raw)
-            except (json.JSONDecodeError,TypeError): continue
-            if not authenticated:
-                if msg.get('type')=='auth' and secrets.compare_digest(str(msg.get('pin','')),PIN):
-                    authenticated=True; telemetry_task=asyncio.create_task(send_telemetry(ws)); await ws.send(json.dumps({'type':'auth_ok'}))
-                else:
-                    await ws.close(code=4001,reason='PIN rejected'); return
-                continue
+        async for raw in websocket:
             try:
-                kind=msg.get('type')
-                if kind=='hotkey': hotkey(str(msg.get('keys','')))
-                elif kind=='macro': run_macro(str(msg.get('keys','')))
-                elif kind=='media': media(str(msg.get('action','')))
-                elif kind=='volume': set_volume(msg.get('value',0))
-                elif kind=='launch':
-                    command=str(msg.get('command',''))
-                    if command not in COMMANDS: raise ValueError('Команда отсутствует в белом списке')
-                    subprocess.Popen(COMMANDS[command],shell=False)
-                else: raise ValueError('Неизвестный тип команды')
-                await ws.send(json.dumps({'type':'ack','ok':True}))
+                message = json.loads(raw)
+                if not isinstance(message, dict):
+                    continue
+            except (json.JSONDecodeError, TypeError):
+                await websocket.send(json.dumps({"type": "error", "error": "invalid_json"}))
+                continue
+
+            if not authenticated:
+                if message.get("type") == "auth" and secrets.compare_digest(str(message.get("pin", "")), PIN):
+                    authenticated = True
+                    await websocket.send(json.dumps({"type": "auth_ok"}))
+                    telemetry_task = asyncio.create_task(send_telemetry(websocket))
+                else:
+                    await websocket.send(json.dumps({"type": "auth_error"}))
+                    await websocket.close(code=4001, reason="PIN rejected")
+                    return
+                continue
+
+            try:
+                kind = message.get("type")
+                if kind == "hotkey":
+                    send_hotkey(str(message.get("keys", ""))[:120])
+                elif kind == "macro":
+                    run_macro(str(message.get("keys", ""))[:1500])
+                elif kind == "media":
+                    send_media(str(message.get("action", "")))
+                elif kind == "volume":
+                    set_master_volume(message.get("value", 0))
+                elif kind == "launch":
+                    command_id = str(message.get("command", ""))
+                    command = COMMANDS.get(command_id)
+                    if command is None:
+                        raise ValueError("Команда отсутствует в белом списке")
+                    subprocess.Popen(command, shell=False)
+                else:
+                    raise ValueError("Неизвестный тип команды")
+                await websocket.send(json.dumps({"type": "ack", "ok": True}))
             except Exception as exc:
-                await ws.send(json.dumps({'type':'ack','ok':False,'error':str(exc)[:180]}))
+                await websocket.send(json.dumps({"type": "ack", "ok": False, "error": str(exc)[:180]}))
     finally:
-        if telemetry_task: telemetry_task.cancel()
+        if telemetry_task:
+            telemetry_task.cancel()
+            try:
+                await telemetry_task
+            except asyncio.CancelledError:
+                pass
 
-async def main():
+
+async def main() -> None:
     psutil.cpu_percent(interval=None)
-    print(f'FerDeck server: ws://{get_ip()}:{PORT} | PIN: {PIN}')
-    print('Смартфон и ПК должны быть в одной Wi-Fi сети. Ctrl+C — выход.')
-    async with websockets.serve(handler,'0.0.0.0',PORT,ping_interval=20,max_size=65536): await asyncio.Future()
+    print("=" * 54)
+    print("FerDeck • Windows companion server")
+    print(f"Address : ws://{local_ip()}:{PORT}")
+    print(f"Port    : {PORT}")
+    print(f"PIN     : {PIN}")
+    print("Phone and PC must be connected to the same Wi-Fi.")
+    print("Allow Python through Windows Firewall on Private networks.")
+    print("Ctrl+C to stop.")
+    print("=" * 54)
+    async with websockets.serve(handler, HOST, PORT, ping_interval=20, max_size=65536):
+        await asyncio.Future()
 
-if __name__=='__main__':
-    try: asyncio.run(main())
-    except KeyboardInterrupt: print('Server stopped')
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\nFerDeck server stopped.")
