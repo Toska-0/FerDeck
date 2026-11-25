@@ -69,7 +69,7 @@ fun FerDeckScreen(vm:DeckViewModel,onExport:()->Unit,onImport:()->Unit){
      items((0 until p.rows*p.columns).toList()){idx->
       val row=idx/p.columns;val col=idx%p.columns
       val tile=p.tiles.firstOrNull{it.row==row&&it.column==col}?:Tile(row=row,column=col)
-      DeckTile(tile,stats.cpu,stats.ram,stats.gpu,editing){
+      DeckTile(tile,stats.cpu,stats.ram,stats.gpu,editing,vm::volume){
        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
        if(editing)selected=tile else if(tile.type=="volume")Unit else {vm.execute(tile);showLog=true}
       }
@@ -93,16 +93,16 @@ fun FerDeckScreen(vm:DeckViewModel,onExport:()->Unit,onImport:()->Unit){
 }
 
 @Composable
-private fun DeckTile(tile:Tile,cpu:Float,ram:Float,gpu:Float,editing:Boolean,onClick:()->Unit){
+private fun DeckTile(tile:Tile,cpu:Float,ram:Float,gpu:Float,editing:Boolean,onVolume:(Float)->Unit,onClick:()->Unit){
  var pressed by remember{mutableStateOf(false)}
- val scale by animateFloatAsState(if(pressed).0.96f else 1f,label="tilePress")
+ val scale by animateFloatAsState(if(pressed) 0.96f else 1f,label="tilePress")
  Column(Modifier.fillMaxWidth().height(108.dp).scale(scale).background(Panel,RoundedCornerShape(17.dp)).border(1.dp,Color(0xFF292929),RoundedCornerShape(17.dp)).clickable{onClick()}.padding(9.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Center){
   Text(if(tile.type=="empty")"＋" else tile.icon,fontSize=25.sp,color=Green)
   Spacer(Modifier.height(4.dp))
   Text(tile.title.ifBlank{if(tile.type=="empty")"Добавить" else tile.type},color=Color.White,fontSize=11.sp,maxLines=2)
   when(tile.type){
    "telemetry"->Sparkline(listOf(cpu,ram,gpu.coerceAtLeast(0f)))
-   "volume"->Slider(value=0.5f,onValueChange={},modifier=Modifier.height(24.dp))
+   "volume"->Slider(value=0.5f,onValueChange=onVolume,modifier=Modifier.height(24.dp))
   }
   if(editing)Text("EDIT",color=Green,fontSize=8.sp)
  }
@@ -129,5 +129,5 @@ private fun TileEditor(initial:Tile,onSave:(Tile)->Unit,onClear:()->Unit,onClose
    OutlinedTextField(action,{action=it},label={Text("Действие / клавиши")},singleLine=true)
    OutlinedTextField(command,{command=it},label={Text("ID разрешённой команды")},singleLine=true)
   }
- },confirmButton={TextButton(onClick={onSave(initial.copy(type=type,title=title,icon=icon,action=action,commandId=command))) {Text("Сохранить")}},dismissButton={Row{TextButton(onClick=onClear){Text("Очистить")};TextButton(onClick=onClose){Text("Отмена")}}})
+ },confirmButton={TextButton(onClick={onSave(initial.copy(type=type,title=title,icon=icon,action=action,commandId=command))}) {Text("Сохранить")}},dismissButton={Row{TextButton(onClick=onClear){Text("Очистить")};TextButton(onClick=onClose){Text("Отмена")}}})
 }
