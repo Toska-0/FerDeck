@@ -133,9 +133,12 @@ fun FerDeckScreen(
                 val page = config.pages[pageIndex]
                 val cells = (0 until page.rows * page.columns).toList()
                 BoxWithConstraints(Modifier.fillMaxSize()) {
-                    val cellHeight = ((maxHeight - (page.rows - 1) * 9.dp) / page.rows).coerceIn(68.dp, 148.dp)
+                    val landscape = maxWidth > maxHeight
+                    val displayColumns = if (landscape) maxOf(page.columns, 5) else page.columns
+                    val displayRows = (cells.size + displayColumns - 1) / displayColumns
+                    val cellHeight = ((maxHeight - (displayRows - 1) * 9.dp) / displayRows).coerceIn(68.dp, 148.dp)
                     LazyVerticalGrid(
-                        columns = GridCells.Fixed(page.columns),
+                        columns = GridCells.Fixed(displayColumns),
                         modifier = Modifier.fillMaxSize(),
                         verticalArrangement = Arrangement.spacedBy(9.dp),
                         horizontalArrangement = Arrangement.spacedBy(9.dp),
@@ -355,6 +358,11 @@ private fun TileEditor(initial: Tile, onSave: (Tile) -> Unit, onClear: () -> Uni
                 }
                 OutlinedTextField(title, { title = it }, label = { Text("Название") }, singleLine = true)
                 OutlinedTextField(icon, { icon = it }, label = { Text("Иконка / emoji") }, singleLine = true)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("🎮", "⏯", "🔊", "🖥", "🌐", "⚙", "🚀").forEach { emoji ->
+                        Text(emoji, modifier = Modifier.clickable { icon = emoji }, fontSize = 18.sp)
+                    }
+                }
                 when (type) {
                     "hotkey" -> OutlinedTextField(action, { action = it }, label = { Text("Клавиши: ctrl+shift+m") }, singleLine = true)
                     "macro" -> OutlinedTextField(action, { action = it }, label = { Text("Макрос: ctrl+c;wait:300;ctrl+v") }, minLines = 2)
@@ -369,7 +377,14 @@ private fun TileEditor(initial: Tile, onSave: (Tile) -> Unit, onClear: () -> Uni
                             }
                         }
                     }
-                    "launch" -> OutlinedTextField(command, { command = it }, label = { Text("ID команды из белого списка") }, singleLine = true)
+                    "launch" -> {
+                        OutlinedTextField(command, { command = it }, label = { Text("ID команды из белого списка") }, singleLine = true)
+                        Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                            listOf("notepad", "calculator", "steam", "browser", "explorer").forEach { id ->
+                                AssistChip(onClick = { command = id }, label = { Text(id, fontSize = 9.sp) })
+                            }
+                        }
+                    }
                 }
                 Text("ЦВЕТ АКЦЕНТА", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                 Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
