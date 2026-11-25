@@ -304,7 +304,7 @@ private fun DeckTile(
                     Text("R ${ram.toInt()}%", color = Color.LightGray, fontSize = 8.sp)
                     Text("G ${if (gpu < 0) "—" else gpu.toInt()}%", color = Color.LightGray, fontSize = 8.sp)
                 }
-                Sparkline(history.takeLast(45).map { it.cpu }, accent)
+                Sparkline(history.takeLast(45), accent)
             }
         }
         if (editing) Text("НАСТРОИТЬ", color = accent, fontSize = 7.sp)
@@ -312,16 +312,21 @@ private fun DeckTile(
 }
 
 @Composable
-private fun Sparkline(values: List<Float>, color: Color) {
-    Canvas(Modifier.fillMaxWidth().height(20.dp)) {
-        if (values.size < 2) return@Canvas
-        val path = Path()
-        values.forEachIndexed { index, value ->
-            val x = size.width * index / (values.size - 1).toFloat()
-            val y = size.height * (1f - value.coerceIn(0f, 100f) / 100f)
-            if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
+private fun Sparkline(samples: List<Telemetry>, accent: Color) {
+    Canvas(Modifier.fillMaxWidth().height(24.dp)) {
+        if (samples.size < 2) return@Canvas
+        fun plot(values: List<Float>, lineColor: Color) {
+            val path = Path()
+            values.forEachIndexed { index, value ->
+                val x = size.width * index / (values.size - 1).toFloat()
+                val y = size.height * (1f - value.coerceIn(0f, 100f) / 100f)
+                if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
+            }
+            drawPath(path, lineColor, style = Stroke(width = 2.1f))
         }
-        drawPath(path, color, style = Stroke(width = 2.5f))
+        plot(samples.map { it.cpu }, accent)
+        plot(samples.map { it.ram }, Color(0xFF4DA3FF))
+        plot(samples.map { it.gpu.coerceAtLeast(0f) }, Color(0xFFFFB547))
     }
 }
 
