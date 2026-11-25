@@ -189,7 +189,7 @@ fun FerDeckScreen(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text("CPU ${stats.cpu.toInt()}%   RAM ${stats.ram.toInt()}%   GPU ${if (stats.gpu < 0) "—" else "${stats.gpu.toInt()}%"}", color = Color.Gray, fontSize = 10.sp)
-                    TextButton(onClick = { snackbar.showSnackbar(log.ifBlank { "Команды появятся здесь" }) }) { Text("ЛОГ", color = DeckGreen, fontSize = 10.sp) }
+                    TextButton(onClick = { scope.launch { snackbar.showSnackbar(log.ifBlank { "Команды появятся здесь" }) } }) { Text("ЛОГ", color = DeckGreen, fontSize = 10.sp) }
                 }
             }
         }
