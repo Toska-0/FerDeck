@@ -7,6 +7,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -94,15 +96,17 @@ fun FerDeckScreen(vm:DeckViewModel,onExport:()->Unit,onImport:()->Unit){
 
 @Composable
 private fun DeckTile(tile:Tile,cpu:Float,ram:Float,gpu:Float,editing:Boolean,onVolume:(Float)->Unit,onClick:()->Unit){
- var pressed by remember{mutableStateOf(false)}
+ val interaction=remember{MutableInteractionSource()}
+ val pressed by interaction.collectIsPressedAsState()
  val scale by animateFloatAsState(if(pressed) 0.96f else 1f,label="tilePress")
- Column(Modifier.fillMaxWidth().height(108.dp).scale(scale).background(Panel,RoundedCornerShape(17.dp)).border(1.dp,Color(0xFF292929),RoundedCornerShape(17.dp)).clickable{onClick()}.padding(9.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Center){
+ var volume by remember{mutableStateOf(0.5f)}
+ Column(Modifier.fillMaxWidth().height(108.dp).scale(scale).background(Panel,RoundedCornerShape(17.dp)).border(1.dp,Color(0xFF292929),RoundedCornerShape(17.dp)).clickable(interactionSource=interaction,indication=null){onClick()}.padding(9.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Center){
   Text(if(tile.type=="empty")"＋" else tile.icon,fontSize=25.sp,color=Green)
   Spacer(Modifier.height(4.dp))
   Text(tile.title.ifBlank{if(tile.type=="empty")"Добавить" else tile.type},color=Color.White,fontSize=11.sp,maxLines=2)
   when(tile.type){
-   "telemetry"->Sparkline(listOf(cpu,ram,gpu.coerceAtLeast(0f)))
-   "volume"->Slider(value=0.5f,onValueChange=onVolume,modifier=Modifier.height(24.dp))
+   "telemetry"->{Text("CPU ${cpu.toInt()}  RAM ${ram.toInt()}  GPU ${if(gpu<0)"—" else gpu.toInt().toString()}",color=Color.LightGray,fontSize=8.sp);Sparkline(listOf(cpu,ram,gpu.coerceAtLeast(0f)))}
+   "volume"->Slider(value=volume,onValueChange={volume=it;onVolume(it)},modifier=Modifier.height(24.dp))
   }
   if(editing)Text("EDIT",color=Green,fontSize=8.sp)
  }
