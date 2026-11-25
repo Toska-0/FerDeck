@@ -31,16 +31,16 @@ class WebSocketManager {
                 _log.value = "Соединение открыто, проверка PIN…"
             }
             override fun onMessage(webSocket: WebSocket, text: String) {
-                _log.value = text
-                runCatching { json.parseToJsonElement(text).jsonObject["type"]?.jsonPrimitive?.content }
-                    .getOrNull()?.let { type ->
-                        when (type) {
-                            "auth_ok" -> _connected.value = true
-                            "auth_error" -> { _connected.value = false; _log.value = "Неверный PIN" }
-                        }
-                    }
-                runCatching { json.decodeFromString<Telemetry>(text) }.getOrNull()
-                    ?.takeIf { it.type == "telemetry" }?.let { _telemetry.value = it }
+                val type = runCatching {
+                    json.parseToJsonElement(text).jsonObject["type"]?.jsonPrimitive?.content
+                }.getOrNull()
+                when (type) {
+                    "auth_ok" -> { _connected.value = true; _log.value = "Авторизация успешна" }
+                    "auth_error" -> { _connected.value = false; _log.value = "Неверный PIN" }
+                    "telemetry" -> runCatching { json.decodeFromString<Telemetry>(text) }
+                        .getOrNull()?.let { _telemetry.value = it }
+                    else -> _log.value = text
+                }
             }
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 _connected.value = false
@@ -57,7 +57,7 @@ class WebSocketManager {
     fun send(message: WireMessage) {
         val raw = json.encodeToString(message)
         _log.value = raw
-        if (connected.value) socket?.send(raw) else _log.value = "DEMO / OFFLINE → $raw"
+        if (connected.value) socket?.send(raw) else _log.value = "OFFLINE → $raw"
     }
 
     @Synchronized
