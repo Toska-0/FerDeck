@@ -33,6 +33,18 @@ ALLOWED_KEYS = {
 
 
 def local_ip() -> str:
+    # Prefer an active Wi-Fi adapter when Windows exposes its interface name.
+    try:
+        for name, addresses in psutil.net_if_addrs().items():
+            lowered = name.lower()
+            if any(token in lowered for token in ("wi-fi", "wifi", "wlan", "wireless")):
+                if not psutil.net_if_stats().get(name, None) or not psutil.net_if_stats()[name].isup:
+                    continue
+                for address in addresses:
+                    if address.family == socket.AF_INET and not address.address.startswith("127."):
+                        return address.address
+    except Exception:
+        pass
     probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         probe.connect(("192.0.2.1", 80))
@@ -104,12 +116,15 @@ def set_master_volume(value: Any) -> None:
 
 async def send_telemetry(websocket: Any) -> None:
     while True:
-        await websocket.send(json.dumps({
-            "type": "telemetry",
-            "cpu": psutil.cpu_percent(interval=None),
-            "ram": psutil.virtual_memory().percent,
-            "gpu": gpu_usage(),
-        }, separators=(",", ":")))
+        try:
+            await websocket.send(json.dumps({
+                "type": "telemetry",
+                "cpu": psutil.cpu_percent(interval=None),
+                "ram": psutil.virtual_memory().percent,
+                "gpu": gpu_usage(),
+            }, separators=(",", ":")))
+        except websockets.ConnectionClosed:
+            return
         await asyncio.sleep(1)
 
 
@@ -163,7 +178,7 @@ async def handler(websocket: Any) -> None:
             telemetry_task.cancel()
             try:
                 await telemetry_task
-            except asyncio.CancelledError:
+            except (asyncio.CancelledError, websockets.ConnectionClosed):
                 pass
 
 
