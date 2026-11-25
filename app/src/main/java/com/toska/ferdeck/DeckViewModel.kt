@@ -68,6 +68,8 @@ class DeckViewModel(app: Application) : AndroidViewModel(app) {
 
     fun connect() {
         _demo.value = false
+        _config.update { it.copy(demoMode = false) }
+        persist()
         reconnectJob?.cancel()
         val target = _config.value
         ws.connect(target.host, target.port, target.pin)
