@@ -8,7 +8,7 @@ PIN = os.getenv('FERDECK_PIN') or f'{secrets.randbelow(1_000_000):06d}'
 COMMANDS = {
     'notepad': ['notepad.exe'],
     'calculator': ['calc.exe'],
-    'steam': [r'C:\\Program Files (x86)\\Steam\\steam.exe'],
+    'steam': [r'C:\Program Files (x86)\Steam\steam.exe'],
     'browser': ['cmd', '/c', 'start', '', 'https://www.google.com'],
 }
 ALLOWED_KEYS = {'ctrl','shift','alt','win','enter','esc','tab','space','f1','f2','f3','f4','f5','f6','f7','f8','f9','f10','f11','f12','up','down','left','right','home','end','delete','backspace','a','c','v','x','z','m','d','r','l'}
